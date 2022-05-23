@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from torchvision import transforms, datasets
 from model import ClsModel
 from tensorboardX import SummaryWriter
+import torchvision
 
 
 def vis_info(info, model_name):
@@ -24,17 +25,17 @@ def vis_info(info, model_name):
 
 
 def main():
-    batch_size = 24
+    batch_size = 64
     nw = 1
-    img_size = 256
-    src_path = r'E:\0Ecode\code220328_cls\dataset\data2'
+    img_size = 128
     model_name = 'mobilenetv2_100'
+    save_dir = 'weights'
+    if os.path.exists(save_dir) is False:
+        os.mkdir(save_dir)
 
     writer = SummaryWriter()
-
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("| Device:", device)
-
     data_transform = {
         "train": transforms.Compose([
             transforms.Resize((img_size, img_size)),
@@ -44,35 +45,22 @@ def main():
         "val": transforms.Compose([transforms.Resize((img_size, img_size)),
                                    transforms.ToTensor(),
                                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])}
-
     # 加载训练集和验证集
-    train_dir = os.path.join(src_path, 'train')
-    assert os.path.exists(train_dir), "{} path does not exist.".format(train_dir)
-    val_dir = os.path.join(src_path, 'test')
-    assert os.path.exists(train_dir), "{} path does not exist.".format(val_dir)
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                            download=True, transform=data_transform['train'])
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                              shuffle=True, num_workers=nw)
+    valset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                           download=True, transform=data_transform['val'])
+    valloader = torch.utils.data.DataLoader(valset, batch_size=batch_size,
+                                             shuffle=False, num_workers=nw)
 
-    train_dataset = datasets.ImageFolder(root=train_dir,
-                                         transform=data_transform["train"])
-    train_num = len(train_dataset)
-    train_loader = torch.utils.data.DataLoader(train_dataset,
-                                               batch_size=batch_size, shuffle=True,
-                                               num_workers=nw)
+    classes = ('plane', 'car', 'bird', 'cat',
+               'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+    train_num = len(trainset)
+    val_num = len(valset)
 
-    validate_dataset = datasets.ImageFolder(root=val_dir,
-                                            transform=data_transform["val"])
-    val_num = len(validate_dataset)
-    validate_loader = torch.utils.data.DataLoader(validate_dataset,
-                                                  batch_size=batch_size, shuffle=False,
-                                                  num_workers=nw)
-
-    print("| Train dir:", train_dir)
-    print("| Train num:", train_num)
-    print("| Val dir:", val_dir)
-    print("| Val num:", val_num)
-    print("| Bath size:", batch_size)
-    print("| Number of workers:", nw)
-
-    net = ClsModel(model_name, len(train_dataset.classes))
+    net = ClsModel(model_name, len(classes))
     net.to(device)
 
     # define loss function
@@ -84,9 +72,9 @@ def main():
 
     epochs = 20
     best_acc = 0.0
-    save_path = './weights/{}.pth'.format(model_name)
-    train_steps = len(train_loader)
-    val_steps = len(validate_loader)
+    save_path = '{}/{}.pth'.format(save_dir, model_name)
+    train_steps = len(trainloader)
+    val_steps = len(valloader)
     print("training.....")
     start_time = time.time()
     notes = []
@@ -95,7 +83,7 @@ def main():
         # train
         net.train()
         train_loss, train_acc, cur_acc, cur_loss = 0.0, 0.0, 0.0, 0.0
-        for step, data in enumerate(train_loader):
+        for step, data in enumerate(trainloader):
             images, labels = data
             optimizer.zero_grad()
             logits = net(images.to(device))
@@ -118,7 +106,7 @@ def main():
         net.eval()
         val_loss, val_acc, cur_acc, cur_loss = 0.0, 0.0, 0.0, 0.0
         with torch.no_grad():
-            for step, val_data in enumerate(validate_loader):
+            for step, val_data in enumerate(valloader):
                 val_images, val_labels = val_data
                 outputs = net(val_images.to(device))
                 loss = loss_function(outputs, val_labels.to(device))
@@ -144,6 +132,7 @@ def main():
         notes.append([train_accurate, train_loss_avg, val_accurate, val_loss_avg])
 
     vis_info(notes, model_name)
+    np.savetxt('{}.txt'.format(model_name), np.asarray(notes))
     end_time = time.time()
     print("| Time cost:", end_time - start_time)
     print('Done.')

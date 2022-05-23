@@ -4,10 +4,10 @@ import torch.nn as nn
 
 # resnext50, resnet101 and resnet34 residual
 class ClsModel(nn.Module):
-    def __init__(self, model_name, num_class, pretrained=True):
+    def __init__(self, model_name, num_class, pretrained=False):
         super(ClsModel, self).__init__()
 
-        self.base_model = timm.create_model(model_name, pretrained=True)
+        self.base_model = timm.create_model(model_name, pretrained=pretrained)
         self.cls_head = nn.Sequential(nn.Linear(1000, 256),
                                       nn.ReLU(),
                                       nn.Linear(256, num_class),
